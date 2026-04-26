@@ -2,11 +2,19 @@
 
 Official Java SDK for the [FintraPay](https://fintrapay.io) crypto payment gateway API. Accept stablecoin payments, payment links, subscriptions, deposit API, payouts, withdrawals, and earn yield -- all with automatic HMAC-SHA256 request signing.
 
-[![Version](https://img.shields.io/badge/version-0.1.0-blue.svg)](https://central.sonatype.com/artifact/io.fintrapay/fintrapay-java)
+[![Version](https://img.shields.io/badge/version-0.2.0-blue.svg)](https://central.sonatype.com/artifact/io.fintrapay/fintrapay-java)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](https://opensource.org/licenses/MIT)
 [![Java](https://img.shields.io/badge/java-11%2B-blue.svg)](https://openjdk.org/)
 
 ---
+
+> ## ⚠️ v0.2.0 — Breaking change to webhook verification
+>
+> The webhook signature verifier now requires the `X-FintraPay-Timestamp` header
+> to support the v2 webhook envelope (`HMAC(timestamp + "\n" + body)`). Versions
+> prior to 0.2.0 silently rejected every legitimate v2 delivery.
+>
+> See [CHANGELOG.md](CHANGELOG.md) for the migration in your language.
 
 ## Installation
 
@@ -58,7 +66,7 @@ public ResponseEntity<String> handleWebhook(
         @RequestBody byte[] body,
         @RequestHeader("X-FintraPay-Signature") String signature) {
 
-    if (!Webhook.verifySignature(body, signature, WEBHOOK_SECRET)) {
+    if (!Webhook.verifySignature(body, signature, WEBHOOK_SECRET, timestamp)) {
         return ResponseEntity.status(401).body("Invalid signature");
     }
 
@@ -228,7 +236,7 @@ public class WebhookController {
             @RequestBody byte[] body,
             @RequestHeader("X-FintraPay-Signature") String signature) {
 
-        if (!Webhook.verifySignature(body, signature, WEBHOOK_SECRET)) {
+        if (!Webhook.verifySignature(body, signature, WEBHOOK_SECRET, timestamp)) {
             return ResponseEntity.status(401).body("Invalid signature");
         }
 
@@ -256,7 +264,7 @@ public class WebhookServlet extends HttpServlet {
         byte[] body = req.getInputStream().readAllBytes();
         String signature = req.getHeader("X-FintraPay-Signature");
 
-        if (!Webhook.verifySignature(body, signature, WEBHOOK_SECRET)) {
+        if (!Webhook.verifySignature(body, signature, WEBHOOK_SECRET, timestamp)) {
             resp.setStatus(401);
             return;
         }

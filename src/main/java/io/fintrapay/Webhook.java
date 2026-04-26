@@ -6,6 +6,9 @@ import java.nio.charset.StandardCharsets;
 import java.security.InvalidKeyException;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
+import java.time.Duration;
+import java.time.Instant;
+import java.time.format.DateTimeParseException;
 
 /**
  * Webhook signature verification helper for FintraPay.
@@ -74,19 +77,43 @@ public final class Webhook {
         // Prevent instantiation.
     }
 
+    /** Default freshness window for v2 deliveries: 5 minutes. */
+    public static final Duration DEFAULT_MAX_AGE = Duration.ofMinutes(5);
+
     /**
-     * Verify an FintraPay webhook signature.
+     * Verify an FintraPay v2 webhook signature with the default 5-minute freshness window.
      *
-     * <p>Computes HMAC-SHA256 of {@code rawBody} using {@code webhookSecret} and
-     * compares it to the provided {@code signature} using constant-time comparison
-     * to prevent timing attacks.</p>
-     *
-     * @param rawBody       The raw request body bytes. Do NOT parse JSON first.
+     * @param rawBody       Raw request body bytes. Do NOT parse JSON first.
      * @param signature     The {@code X-FintraPay-Signature} header value.
-     * @param webhookSecret Your webhook secret from the FintraPay dashboard.
-     * @return {@code true} if the signature is valid, {@code false} otherwise.
+     * @param webhookSecret Your webhook secret from the dashboard.
+     * @param timestamp     The {@code X-FintraPay-Timestamp} header value (RFC3339).
+     *                      Pass {@code null} or empty only when verifying a legacy v1
+     *                      raw-body delivery (discouraged).
+     * @return true if signature valid AND timestamp is within DEFAULT_MAX_AGE.
      */
-    public static boolean verifySignature(byte[] rawBody, String signature, String webhookSecret) {
+    public static boolean verifySignature(byte[] rawBody, String signature, String webhookSecret, String timestamp) {
+        return verifySignature(rawBody, signature, webhookSecret, timestamp, DEFAULT_MAX_AGE);
+    }
+
+    /**
+     * Verify an FintraPay v2 webhook signature.
+     *
+     * <p>The v2 envelope signs (timestamp + "\n" + rawBody) with HMAC-SHA256 hex-encoded.
+     * The signature comparison uses {@link MessageDigest#isEqual} for constant-time
+     * comparison.</p>
+     *
+     * @param rawBody       Raw request body bytes. Do NOT parse JSON first.
+     * @param signature     The {@code X-FintraPay-Signature} header value.
+     * @param webhookSecret Your webhook secret from the dashboard.
+     * @param timestamp     The {@code X-FintraPay-Timestamp} header value (RFC3339).
+     *                      Pass {@code null} or empty only when verifying a legacy v1
+     *                      raw-body delivery (discouraged).
+     * @param maxAge        Reject deliveries older than this. Pass {@link Duration#ZERO}
+     *                      to disable the freshness check.
+     * @return true if signature valid (and timestamp within window when supplied).
+     */
+    public static boolean verifySignature(byte[] rawBody, String signature, String webhookSecret,
+                                          String timestamp, Duration maxAge) {
         if (rawBody == null || rawBody.length == 0
                 || signature == null || signature.isEmpty()
                 || webhookSecret == null || webhookSecret.isEmpty()) {
@@ -97,6 +124,23 @@ public final class Webhook {
             Mac mac = Mac.getInstance(HMAC_SHA256);
             mac.init(new SecretKeySpec(
                     webhookSecret.getBytes(StandardCharsets.UTF_8), HMAC_SHA256));
+
+            if (timestamp != null && !timestamp.isEmpty()) {
+                // Freshness check.
+                Instant ts;
+                try {
+                    ts = Instant.parse(timestamp);
+                } catch (DateTimeParseException e) {
+                    return false;
+                }
+                if (maxAge != null && !maxAge.isZero()) {
+                    Duration delta = Duration.between(ts, Instant.now()).abs();
+                    if (delta.compareTo(maxAge) > 0) {
+                        return false;
+                    }
+                }
+                mac.update((timestamp + "\n").getBytes(StandardCharsets.UTF_8));
+            }
             byte[] computed = mac.doFinal(rawBody);
             String expected = bytesToHex(computed);
 
