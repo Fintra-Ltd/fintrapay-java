@@ -23,6 +23,14 @@ public class CreatePayoutRequest {
     private String reference;
 
     /**
+     * "from_amount" (default) — the recipient gets amount minus fees.
+     * "from_balance" — the recipient gets exactly amount and the fees are
+     * debited from your balance on top. Null means from_amount.
+     */
+    @SerializedName("fee_deduction")
+    private String feeDeduction;
+
+    /**
      * Create a payout request.
      *
      * @param toAddress  Recipient wallet address.
@@ -55,4 +63,7 @@ public class CreatePayoutRequest {
 
     public String getReference() { return reference; }
     public CreatePayoutRequest setReference(String reference) { this.reference = reference; return this; }
+
+    public String getFeeDeduction() { return feeDeduction; }
+    public CreatePayoutRequest setFeeDeduction(String feeDeduction) { this.feeDeduction = feeDeduction; return this; }
 }
