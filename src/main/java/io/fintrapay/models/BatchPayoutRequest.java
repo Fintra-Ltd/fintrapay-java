@@ -1,5 +1,7 @@
 package io.fintrapay.models;
 
+import com.google.gson.annotations.SerializedName;
+
 import java.util.List;
 
 /**
@@ -10,7 +12,8 @@ import java.util.List;
  *     new BatchPayoutRequest.Recipient("0xabc...", "50.00", "salary-001"),
  *     new BatchPayoutRequest.Recipient("0xdef...", "75.00", "salary-002")
  * );
- * BatchPayoutRequest req = new BatchPayoutRequest("USDT", "bsc", recipients);
+ * BatchPayoutRequest req = new BatchPayoutRequest("USDT", "bsc", recipients)
+ *     .setFeeDeduction("from_balance"); // optional
  * }</pre>
  */
 public class BatchPayoutRequest {
@@ -18,6 +21,15 @@ public class BatchPayoutRequest {
     private String currency;
     private String blockchain;
     private List<Recipient> recipients;
+
+    /**
+     * Applies to every recipient. "from_amount" (default) — each recipient
+     * gets amount minus the per-recipient fee. "from_balance" — each
+     * recipient gets exactly amount and the fees are debited from your
+     * balance on top. Null means from_amount.
+     */
+    @SerializedName("fee_deduction")
+    private String feeDeduction;
 
     /**
      * Create a batch payout request.
@@ -40,6 +52,9 @@ public class BatchPayoutRequest {
 
     public List<Recipient> getRecipients() { return recipients; }
     public BatchPayoutRequest setRecipients(List<Recipient> recipients) { this.recipients = recipients; return this; }
+
+    public String getFeeDeduction() { return feeDeduction; }
+    public BatchPayoutRequest setFeeDeduction(String feeDeduction) { this.feeDeduction = feeDeduction; return this; }
 
     /**
      * A single recipient in a batch payout.
