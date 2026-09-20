@@ -11,6 +11,7 @@ import io.fintrapay.models.CreateEarnContractRequest;
 import io.fintrapay.models.CreateInvoiceRequest;
 import io.fintrapay.models.CreatePayoutRequest;
 import io.fintrapay.models.CreateRefundRequest;
+import io.fintrapay.models.CreateTransferRequest;
 import io.fintrapay.models.CreateWithdrawalRequest;
 import io.fintrapay.models.ListParams;
 
@@ -335,6 +336,96 @@ public class FintraPay {
      */
     public JsonObject listWithdrawals(int page, int pageSize) throws FintraPayException {
         return this.request("GET", "/withdrawals?page=" + page + "&page_size=" + pageSize, null);
+    }
+
+    // ── Internal transfers ──────────────────────────────────────────
+
+    /**
+     * Check whether an email belongs to a merchant you can send to.
+     *
+     * <p>Returns display details only, never a merchant id — {@code
+     * createTransfer} re-resolves the email server-side. Rate limited, so it
+     * cannot be used to enumerate merchants.</p>
+     *
+     * @param email The recipient's account email.
+     * @return Lookup result as a JSON object.
+     * @throws FintraPayException on API errors.
+     */
+    public JsonObject lookupTransferRecipient(String email) throws FintraPayException {
+        return this.request("GET",
+                "/transfers/lookup?email=" + URLEncoder.encode(email, StandardCharsets.UTF_8), null);
+    }
+
+    /**
+     * Validate a transfer and email a confirmation code to YOUR address.
+     *
+     * <p>The code is never in the response — that would defeat emailing it.
+     * When the result's {@code otp_required} is false the code is waived for
+     * this account and {@code createTransfer} may be called without one.</p>
+     *
+     * @param request The transfer details. Must match the later createTransfer call.
+     * @return {@code {sent, otp_required, expires_in, message}}.
+     * @throws FintraPayException on API errors.
+     */
+    public JsonObject requestTransferOtp(CreateTransferRequest request) throws FintraPayException {
+        return this.request("POST", "/transfers/otp", request);
+    }
+
+    /**
+     * Send balance to another FintraPay merchant. Instant and IRREVERSIBLE.
+     *
+     * <p>Settles on the ledger — no on-chain transaction and no network
+     * fee.</p>
+     *
+     * @param request The transfer details, including the code from
+     *                {@code requestTransferOtp}.
+     * @return The created transfer as a JSON object.
+     * @throws FintraPayException on API errors.
+     */
+    public JsonObject createTransfer(CreateTransferRequest request) throws FintraPayException {
+        return this.request("POST", "/transfers", request);
+    }
+
+    /**
+     * List transfers in BOTH directions.
+     *
+     * <p>Each row carries {@code direction} ("in" or "out") and the
+     * counterparty, so one call covers money sent and received.</p>
+     *
+     * @param page     Page number, 1-based.
+     * @param pageSize Items per page.
+     * @return A page of transfers.
+     * @throws FintraPayException on API errors.
+     */
+    public JsonObject listTransfers(int page, int pageSize) throws FintraPayException {
+        return this.request("GET", "/transfers?page=" + page + "&page_size=" + pageSize, null);
+    }
+
+    // ── Overpayment ─────────────────────────────────────────────────
+
+    /**
+     * Keep an overpayment: credit the excess to your balance.
+     *
+     * @param invoiceId The overpaid invoice's UUID.
+     * @return Result as a JSON object.
+     * @throws FintraPayException on API errors.
+     */
+    public JsonObject acceptOverpayment(String invoiceId) throws FintraPayException {
+        return this.request("POST", "/invoices/" + invoiceId + "/overpayment/accept", null);
+    }
+
+    /**
+     * Return an overpayment to the sender's address.
+     *
+     * <p>Queues the refund — it is not broadcast synchronously. Poll the
+     * invoice or listen for the webhook to see it complete.</p>
+     *
+     * @param invoiceId The overpaid invoice's UUID.
+     * @return Result as a JSON object.
+     * @throws FintraPayException on API errors.
+     */
+    public JsonObject refundOverpayment(String invoiceId) throws FintraPayException {
+        return this.request("POST", "/invoices/" + invoiceId + "/overpayment/refund", null);
     }
 
     // ── Earn ────────────────────────────────────────────────────────
